@@ -105,4 +105,4 @@ async def newprefix(ctx, prefix: str):
     await ctx.send("Change prefix from {} to {}".format(old, bot.command_prefix))
 
 
-bot.run(os.getenv("TOKEN"))
+bot.run(os.getenv("DRAROK_TOKEN"))
