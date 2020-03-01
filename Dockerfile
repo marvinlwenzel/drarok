@@ -7,6 +7,8 @@ WORKDIR /opt/app
 
 RUN pip install pipenv
 
+RUN pipenv install
+
 COPY dbot /opt/app/dbot
 
 CMD pipenv run python dbot/Main.py

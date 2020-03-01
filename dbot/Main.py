@@ -1,24 +1,35 @@
-import discord
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
 import os
 import datetime
+from time import sleep
 
 load_dotenv()
 
 starttime = datetime.datetime.now()
 
+
 class MyBot(Bot):
     to_be_confirmed = False
     exec_after_confirmation = None
 
-    pass
+    inittime = datetime.datetime.now()
+
+    def __init__(self, command_prefix, description=None, **options):
+        self.inittime = datetime.datetime.utcnow()
+        super().__init__(command_prefix, description=description, **options)
+
+    async def close_after_commanded(self):
+        print("Received command to stop running. Closing Bot.")
+        await self.close()
+
 
 description = '''An example bot to showcase the discord.ext.commands extension
 module.
 
 There are a number of utility commands being showcased here.'''
 bot = MyBot(command_prefix='?', description=description)
+
 
 @bot.event
 async def on_ready():
@@ -27,58 +38,71 @@ async def on_ready():
     print(bot.user.id)
     print('------')
 
+
 @bot.command()
 async def add(ctx, left: int, right: int):
     """Adds two numbers together."""
     await ctx.send(left + right)
 
+
 @bot.command()
 async def die(ctx):
+    bot.exec_after_confirmation = bot.close_after_commanded
+    bot.to_be_confirmed = True
     await ctx.send("Do you want me to stop running?")
 
 
-#
-# class MyClient(discord.Client):
-#     die = False
-#     async def on_ready(self):
-#         print('Logged in as')
-#         print(self.user.name)
-#         print(self.user.id)
-#         print('------')
-#
-#     async def on_message(self, message):
-#         # we do not want the bot to reply to itself
-#         if message.author.id == self.user.id:
-#             return
-#
-#         if message.content.startswith('!hello'):
-#             print("Hello")
-#             await message.channel.send('Hello {0.author.mention}'.format(message))
-#
-#         if message.content.startswith('!starttime'):
-#             print("starttime")
-#             await message.channel.send('Startet at {}'.format(starttime))
-#
-#         if message.content.startswith('!ping'):
-#             print("pong")
-#             await message.channel.send('pong')
-#
-#         if message.content.startswith('!die') and not self.die:
-#             print("first die")
-#             self.die = True
-#             await message.channel.send('Do you want me to shut down? Write !yes or !no')
-#
-#         if message.content.startswith('!yes') and self.die:
-#             print("dying")
-#             await message.channel.send('NANI???')
-#             await self.logout()
-#             exit(0)
-#
-#         if message.content.startswith('!no') and self.die:
-#             print("stopped die")
-#             self.die = False
-#             await message.channel.send('ok, stopping dying')
-#
+@bot.command()
+async def exit(ctx):
+    await die(ctx)
+
+
+@bot.command()
+async def yes(ctx):
+    if not bot.to_be_confirmed:
+        await ctx.send("Nothing to confirm.")
+    else:
+        await ctx.send("Confirmed")
+        do_now = bot.exec_after_confirmation
+        bot.to_be_confirmed = False
+        bot.exec_after_confirmation = None
+        await do_now()
+
+
+@bot.command()
+async def no(ctx):
+    if not bot.to_be_confirmed:
+        await ctx.send("Nothing to decline.")
+    else:
+        await ctx.send("Declined")
+        bot.to_be_confirmed = False
+        bot.exec_after_confirmation = None
+
+
+@bot.command()
+async def delme(ctx, time: int):
+    delmsg = ctx.message
+    time = 3 if time is None else time
+    answer = await ctx.send("5")
+    for t in reversed(range(time - 1)):
+        sleep(1)
+        msg = "Bye" if t == 0 else str(t)
+        await answer.edit(content=msg)
+
+    await delmsg.delete()
+    await answer.delete()
+
+
+@bot.command()
+async def starttime(ctx):
+    await ctx.send("Started {} UTC".format(bot.inittime))
+
+
+@bot.command()
+async def newprefix(ctx, prefix: str):
+    old = bot.command_prefix
+    bot.command_prefix = prefix
+    await ctx.send("Change prefix from {} to {}".format(old, bot.command_prefix))
+
 
 bot.run(os.getenv("TOKEN"))
-
