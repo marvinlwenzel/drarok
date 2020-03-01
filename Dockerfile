@@ -1,11 +1,12 @@
 FROM python:3.8
 
-COPY . /opt/app
+COPY ./Pipfile /opt/app/
+COPY ./Pipfile.lock /opt/app/
 
 WORKDIR /opt/app
 
 RUN pip install pipenv
 
-RUN pipenv install
+COPY dbot /opt/app/dbot
 
 CMD pipenv run python dbot/Main.py
