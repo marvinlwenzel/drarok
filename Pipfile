@@ -9,6 +9,8 @@ pylint = "*"
 [packages]
 discord-py = {extras = ["voice"],version = "*"}
 python-dotenv = "*"
+gspread = "*"
+oauth2client = "*"
 
 [requires]
 python_version = "3.8"
