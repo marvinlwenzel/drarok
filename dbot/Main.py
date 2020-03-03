@@ -4,6 +4,8 @@ import os
 import datetime
 from time import sleep
 
+from dbot.storage import GoogleSpreadsheetStorage, PersonalGuildNotesRepository, PersonalGuildNote
+
 load_dotenv()
 
 starttime = datetime.datetime.now()
@@ -15,9 +17,10 @@ class MyBot(Bot):
 
     inittime = datetime.datetime.now()
 
-    def __init__(self, command_prefix, description=None, **options):
-        self.inittime = datetime.datetime.utcnow()
+    def __init__(self, gstoreage_credential_json, command_prefix='?', description=None, **options):
         super().__init__(command_prefix, description=description, **options)
+        self.inittime = datetime.datetime.utcnow()
+        self.gss = GoogleSpreadsheetStorage(gstoreage_credential_json)
 
     async def close_after_commanded(self):
         print("Received command to stop running. Closing Bot.")
@@ -28,7 +31,7 @@ description = '''An example bot to showcase the discord.ext.commands extension
 module.
 
 There are a number of utility commands being showcased here.'''
-bot = MyBot(command_prefix='?', description=description)
+bot = MyBot(gstoreage_credential_json=os.getenv("GS_CRED_JSON"), command_prefix='?', description=description)
 
 
 @bot.event
@@ -104,5 +107,24 @@ async def newprefix(ctx, prefix: str):
     bot.command_prefix = prefix
     await ctx.send("Change prefix from {} to {}".format(old, bot.command_prefix))
 
+
+@bot.command()
+async def note(ctx, *args: str):
+    gid = ctx.guild.id
+    uid = ctx.author.id
+
+    if len(args) == 0 or args[0] == 'help':
+        await ctx.send("Here you should get a useful and up-to-date help msg at some point")
+        return
+    elif args[0] == 'list':
+        answer = await ctx.send("Fetching notes...")
+        pgs = PersonalGuildNotesRepository(bot.gss, guild_id= gid)
+        notes = pgs.read_all_for_user(uid)
+        printable_notes = map(PersonalGuildNote.pretty_print, notes)
+        msg = """```\n{}```""".format("\n".join(printable_notes))
+        await answer.edit(content=msg)
+        return
+    else:
+        await ctx.send("Here you should get a useful and up-to-date help msg at some point")
 
 bot.run(os.getenv("DRAROK_TOKEN"))

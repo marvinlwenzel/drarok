@@ -38,6 +38,9 @@ class PersonalGuildNote:
         self.name = note_name
         self.content = note_value
 
+    def pretty_print(self):
+        return '{}: {}'.format(self.name, self.content)
+
 
 class PersonalGuildNotesRepository:
     '''
