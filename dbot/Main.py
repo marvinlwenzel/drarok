@@ -124,6 +124,13 @@ async def note(ctx, *args: str):
         msg = """```\n{}```""".format("\n".join(printable_notes))
         await answer.edit(content=msg)
         return
+    elif args[0] == 'add':
+        note = " ".join(args[1:])
+        answer = await ctx.send("Adding note...")
+        pgs = PersonalGuildNotesRepository(bot.gss, guild_id=gid)
+        pgs.add_note_for_user(user_id=uid, content=note)
+        await answer.edit(content="Done")
+        return
     else:
         await ctx.send("Here you should get a useful and up-to-date help msg at some point")
 

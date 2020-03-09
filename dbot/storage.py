@@ -55,7 +55,7 @@ class PersonalGuildNotesRepository:
         try:
             wks = self.ss.worksheet(str(user_id))
         except:
-            return None
+            return []
         result = []
         content = wks.col_values(1)
         for i in range(len(content)):
