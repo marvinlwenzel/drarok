@@ -4,9 +4,9 @@ import os
 import datetime
 from time import sleep
 
-from dbot.storage import GoogleSpreadsheetStorage, PersonalGuildNotesRepository, PersonalGuildNote
+from storage import GoogleSpreadsheetStorage, PersonalGuildNotesRepository, PersonalGuildNote
 
-load_dotenv()
+load_dotenv(dotenv_path="drarok.env")
 
 starttime = datetime.datetime.now()
 
