@@ -160,7 +160,7 @@ function build_image() {
 function deploy_new_image() {
   docker stop $DRAROK_CONTAINER_NAME && verbose "Stopped container $DRAROK_CONTAINER_NAME" || echo "Did not stop container $DRAROK_CONTAINER_NAME"
   docker container rm $DRAROK_CONTAINER_NAME && verbose "Removed container $DRAROK_CONTAINER_NAME" || echo "Did not remove container $DRAROK_CONTAINER_NAME"
-  docker run $DETACH \
+  docker run $ATTACHMENT \
     -e DRAROK_TOKEN=$DRAROK_TOKEN \
     -e DRAROK_CRED_DIR=$DRAROK_CRED_DIR_CONTAINER \
     --name $DRAROK_CONTAINER_NAME \
