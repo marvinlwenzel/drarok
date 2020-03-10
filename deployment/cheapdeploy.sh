@@ -5,7 +5,7 @@
 SHOULD_SOURCE_ENVFILE=TRUE
 FORCE_RESTART=TRUE
 VERBOSE=FALSE
-
+RECURSIVE_OPT=""
 
 # Helping functions
 
@@ -14,7 +14,7 @@ verbose () {
 }
 
 err_exit () {
-  echo $@ >&2
+  echo "$@" >&2
   echo "Abort." >&2
   exit 1
 }
@@ -28,49 +28,67 @@ case $i in
     # see https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
 
     # -e=*|--extension=*)
-    # EXTENSION="${i#*=}"
+    # EXTENSION="${i#*=}""
     # shift # past argument=value
     # ;;
-
-    --force-restart)
-    FORCE_RESTART=TRUE
+    start)
+    [ ! $COMMAND -z ] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
+    COMMAND=START
     shift
     ;;
-    --no-force-restart)
-    FORCE_RESTART=FALSE
+    stop)
+    [ ! $COMMAND -z ] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
+    COMMAND=STOP
+    shift
+    ;;
+    restart)
+    [ ! $COMMAND -z ] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
+    COMMAND=RESTART
+    shift
+    ;;
+    build)
+    [ ! $COMMAND -z ] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
+    COMMAND=BUILD
+    shift
+    ;;
+    redeploy)
+    [ ! $COMMAND -z ] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
+    COMMAND=REDEPLOY
     shift
     ;;
     --no-envfiles)
     SHOULD_SOURCE_ENVFILE=FALSE
+    RECURSIVE_OPT="$RECURSIVE_OPT $i"
     shift
     ;;
     -v|--verbose)
     VERBOSE=TRUE
+    RECURSIVE_OPT="$RECURSIVE_OPT $i"
     shift
     ;;
     -c=*|--cred-dir-host=*)
     DRAROK_CRED_DIR_HOST="${i#*=}"
+    RECURSIVE_OPT="$RECURSIVE_OPT $i"
     shift
     ;;
-    --dry-run)
-    DRY_RUN=TRUE
+    --auto-tagging)
+    AUTO_TAGGING=TRUE
+    RECURSIVE_OPT="$RECURSIVE_OPT $i"
+    shift
+    ;;
+    --no-auto-tagging)
+    AUTO_TAGGING=FALSE
+    RECURSIVE_OPT="$RECURSIVE_OPT $i"
     shift
     ;;
     -h|--help)
-    help="$0 usage.
+    help="$0 [start|restart|stop|build|redeploy] <OPTIONS>
 
 -h|--help           Show this.
 
 --no-envfiles       Do not source any .env files. By default, a file named .env is
                     sourced, otherwise all files matching *.env are sourced. If none
                     are found, exit 1.
-
---no-force-restart  Before restarting the container, check if the image and
-                    the running container have different SHA's. If they are the
-                    same, do not restart the container.
-
---force-restart     Default behaviour. Restart the container ignoring that it
-                    might restrat with the same image as it already runs on.
 
 -r=<REP>|--repository=<REP>
                     Set the git repository to <REP>. Does NOT imply
@@ -83,6 +101,7 @@ case $i in
 -v|--verbose        MIGHT LOG CREDENTIALS. CARE.
 
 --dry-run           Stops before going into DRAROK_WORKDIR and doing stuff.
+
 "
     echo "$help"
     exit 0
@@ -123,6 +142,50 @@ then
   fi
 fi
 
+# If something should have been sourced, but nothing was sourced: fail.
+
+if [[ $SHOULD_SOURCE_ENVFILE == "TRUE" && ! $AT_LEAST_ONE_ENVFILE_WAS_SOURCED == "TRUE" ]]
+then
+    echo "Did not find any environment variables. If this is intended, run again with --no-envfiles" >&2
+fi
+
+
+# STOP existing container
+
+if [ $COMMAND == STOP ]
+then
+  [ -z $DRAROK_CONTAINER_NAME ] && err_exit "Can not stop drarok container without\nDRAROK_CONTAINER_NAME set."
+  docker stop $DRAROK_CONTAINER_NAME || echo "Could not stop container $DRAROK_CONTAINER_NAME" >&2
+  [ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME) == true ] && err_exit "Container $DRAROK_CONTAINER_NAME still runs."
+  echo "No container $DRAROK_CONTAINER_NAME running."
+  exit 0
+fi
+
+# START existing container
+
+if [ $COMMAND == START ]
+then
+  [ -z $DRAROK_CONTAINER_NAME ] && err_exit "Can not stop drarok container without\nDRAROK_CONTAINER_NAME set."
+  [ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME) == true ] && err_exit "Container $DRAROK_CONTAINER_NAME already runs."
+  [ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME) == false ] || err_exit "Container $DRAROK_CONTAINER_NAME does not exist."
+  docker start $DRAROK_CONTAINER_NAME || err_exit "Failed starting $DRAROK_CONTAINER_NAME"
+  echo "Started container $DRAROK_CONTAINER_NAME"
+  exit 0
+fi
+
+# RESTART existing container
+
+if [ $COMMAND == RESTART ]
+then
+  [ -z $DRAROK_CONTAINER_NAME ] && err_exit "Can not stop drarok container without\nDRAROK_CONTAINER_NAME set."
+  container_exists=$(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME  > /dev/null 2>&1 && echo TRUE || echo FALSE)
+  [ $container_exists == false ] && err_exit "Container $DRAROK_CONTAINER_NAME does not exist"
+  container_runs=$(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME)
+  [ $container_runs == true ] && $0 stop $RECURSIVE_OPT || "Could not stop $DRAROK_CONTAINER_NAME for restarting."
+  $0 stop $RECURSIVE_OPT || exit 1
+  exit 0
+fi
+
 
 # Check for required options being set
 # Maybe you wanna use this when working in the script
@@ -154,23 +217,6 @@ done
 [ $MANDATORY_VARIABLE_MISSING == TRUE ] && err_exit "Mandatory variable(s) missing."
 
 
-# If something should have been sourced, but nothing was sourced: fail.
-
-if [[ $SHOULD_SOURCE_ENVFILE == "TRUE" && ! $AT_LEAST_ONE_ENVFILE_WAS_SOURCED == "TRUE" ]]
-then
-    echo "Did not find any environment variables. If this is intended, run again with --no-envfiles" >&2
-fi
-
-
-# Stop before actually doing something if running dry.
-
-if [ $DRY_RUN == TRUE ]
-then
-  echo "Dry run. Stopping now."
-  exit 0
-fi
-
-
 # If DRAROK_WORKDIR exists, go in there
 
 [ -d $DRAROK_WORKDIR ] || err_exit "DRAROK_WORKDIR $DRAROK_WORKDIR does not exist."
@@ -189,29 +235,25 @@ git pull || err_exit "Git pull failed."
 
 # Build docker image locally
 
-docker build . -t $DRAROK_IMAGE_NAME:$DRAROK_IMAGE_VERSION || err_exit "Could not build docker image"
+GIT_COMMIT_SHA_SHORT=$(git rev-parse HEAD | head -c12)
+docker build . -t $DRAROK_IMAGE_NAME:$GIT_COMMIT_SHA_SHORT -t $DRAROK_IMAGE_NAME:latest || err_exit "Could not build docker image"
+
+echo "Built commit: $GIT_COMMIT_SHA_SHORT"
 
 
-AVAILABLE_VERSION=$(docker images | grep $DRAROK_IMAGE_NAME | grep $DRAROK_IMAGE_VERSION | awk '{print $3}')
-CURRENTLY_RUNNING_VERSION=$(docker inspect $DRAROK_CONTAINER_NAME | awk -F":" '/Image.*sha256/ {print $3}' | head -c 12)
+# If there is is something new or restart is forced, actually restart it.
 
-verbose "Available version: $AVAILABLE_VERSION"
-verbose "Currently running version: $CURRENTLY_RUNNING_VERSION"
-
-
-# IF there is is something new or restart is forced, actually restart it.
-
-if [ $FORCE_RESTART == "TRUE" ] || [ ! $AVAILABLE_VERSION == $CURRENTLY_RUNNING_VERSION ]
+if [ $COMMAND == REDEPLOY ]
 then
-  [ -d deploy ] && echo l || echo r
-  docker stop $DRAROK_CONTAINER_NAME && verbose "Did stop container" || echo "Did not stop container"
-  docker container rm $DRAROK_CONTAINER_NAME && verbose "Did rm container" || echo "Did not rm container"
+  docker stop $DRAROK_CONTAINER_NAME && verbose "Stopped container $DRAROK_CONTAINER_NAME" || echo "Did not stop container $DRAROK_CONTAINER_NAME"
+  docker container rm $DRAROK_CONTAINER_NAME && verbose "Removed container $DRAROK_CONTAINER_NAME" || echo "Did not remove container $DRAROK_CONTAINER_NAME"
   docker run -d \
     -e TOKEN=$DRAROK_TOKEN \
     -e DRAROK_CRED_DIR=$DRAROK_CRED_DIR_CONTAINER
     --name $DRAROK_CONTAINER_NAME \
     -v $DRAROK_CRED_DIR_HOST:$DRAROK_CRED_DIR_CONTAINER \
-    $DRAROK_IMAGE_NAME:$DRAROK_IMAGE_VERSION || err_exit "Starting container failed."
+    $DRAROK_IMAGE_NAME:$GIT_COMMIT_SHA_SHORT || err_exit "Starting container failed."
+  echo "Started new container on image $DRAROK_CONTAINER_NAME:$GIT_COMMIT_SHA_SHORT"
 else
   echo "Did not stop or restart container."
 fi

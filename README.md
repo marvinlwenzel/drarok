@@ -25,3 +25,11 @@ You can also run a shell inside the virutal environment running:
 ```bash
 pipenv shell
 ```
+| COMMAND  | container runs before | container does not run before | container runs after                   | container does not run after | build new docker image locally | expect git in WORKDIR |
+| -------- | --------------------- | ----------------------------- | -------------------------------------- | ---------------------------- | ------------------------------ | --------------------- |
+| START    | error                 | expected                      | expected                               | error                        | no                             | idc                   |
+| RESTART  | idc                   | idc                           | expected                               | error                        | no                             | idc                   |
+| STOP     | idc                   | idc                           | somehow we gonna kill it for surrender | expected                     | no                             | idc                   |
+| INSTALL  | error                 | expected                      | expected                               | error                        | yes                            | yes                   |
+| REDEPLOY | idc                   | idc                           | expected                               | error                        | yes                            | yes                   |
+|          |                       |                               |                                        |                              |                                |                       |
