@@ -143,8 +143,8 @@ function update_repo() {
   then
     git pull || err_exit "Git pull failed."
   else
-    git pull origin $BRANCH || err_exit "Git pull failed."
-    git checkout $BRANCH || err_exit "Git checkout failed."
+    git pull origin $BRANCH || err_exit "Git pull branch $BRANCH failed."
+    git checkout $BRANCH || err_exit "Git checkout branch $BRANCH failed."
   fi
 }
 
