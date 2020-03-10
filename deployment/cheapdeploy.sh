@@ -139,7 +139,13 @@ function cd_working_dir() {
 
 
 function update_repo() {
-  git pull || err_exit "Git pull failed."
+  if [[ -z $BRANCH ]]
+  then
+    git pull || err_exit "Git pull failed."
+  else
+    git pull origin $BRANCH || err_exit "Git pull failed."
+    git checkout $BRANCH || err_exit "Git checkout failed."
+  fi
 }
 
 function build_image() {
@@ -216,6 +222,11 @@ case $i in
     ;;
     -c=*|--cred-dir-host=*)
       DRAROK_CRED_DIR_HOST="${i#*=}"
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
+    ;;
+    --branch=*)
+      BRANCH="${i#*=}"
       RECURSIVE_OPT="$RECURSIVE_OPT $i"
       shift
     ;;
