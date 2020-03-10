@@ -6,7 +6,7 @@ SHOULD_SOURCE_ENVFILE=TRUE
 FORCE_RESTART=TRUE
 VERBOSE=FALSE
 RECURSIVE_OPT=""
-
+ATTACHMENT="-d"
 # Helping functions
 
 verbose () {
@@ -30,8 +30,8 @@ function check_madatory_parameters_or_fail() {
   # grep -o '\$[A-Z_][A-Z_]*' cheapdeploy.sh  | sort | uniq | grep -o "[A-Z_]*" | sed ':a;N;$!ba;s/\n/ /g'
   # grep -o '\$DRAROK[A-Z_]*' cheapdeploy.sh  | sort | uniq | grep -o "[A-Z_]*" | sed ':a;N;$!ba;s/\n/ /g'
 
-  for mandatory_variable_name in DRAROK_CONTAINER_NAME DRAROK_CRED_DIR_CONTAINER DRAROK_CRED_DIR_HOST \
-   DRAROK_IMAGE_NAME DRAROK_IMAGE_VERSION DRAROK_TOKEN DRAROK_WORKDIR
+  for mandatory_variable_name in DRAROK_CONTAINER_NAME DRAROK_CRED_DIR_CONTAINER \
+    DRAROK_CRED_DIR_HOST DRAROK_IMAGE_NAME DRAROK_TOKEN DRAROK_WORKDIR
   do
 
     # https://unix.stackexchange.com/questions/41292/variable-substitution-with-an-exclamation-mark-in-bash
@@ -54,8 +54,7 @@ function check_madatory_parameters_or_fail() {
 
 }
 
-function source_env_files_or_fail(parameter) {
-
+function source_env_files_or_fail() {
   AT_LEAST_ONE_ENVFILE_WAS_SOURCED=FALSE
 
   # Sourcing .env files if not specified otherwise
@@ -90,21 +89,42 @@ function source_env_files_or_fail(parameter) {
   fi
 }
 
+function container_exists() {
+  docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME > /dev/null 2>&1 && echo TRUE || echo FALSE
+}
+
+function container_runs() {
+  [[ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME 2>/dev/null) == true ]] && echo TRUE || echo FALSE
+}
+
+
 function stop_container() {
+  [[ $(container_exists) == FALSE ]] && err_exit "Container $DRAROK_CONTAINER_NAME does not exist."
   docker stop $DRAROK_CONTAINER_NAME || echo "Could not stop container $DRAROK_CONTAINER_NAME" >&2
-  [[ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME) == true ]] && err_exit "Container $DRAROK_CONTAINER_NAME still runs."
+  [[ $(container_runs) == TRUE ]] && err_exit "Container $DRAROK_CONTAINER_NAME still runs."
   echo "No container $DRAROK_CONTAINER_NAME running."
   exit 0
 }
 
 function start_container() {
-  [[ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME) == true ]] && err_exit "Container $DRAROK_CONTAINER_NAME already runs."
-  [[ $(docker inspect -f '{{.State.Running}}' $DRAROK_CONTAINER_NAME) == false ]] || err_exit "Container $DRAROK_CONTAINER_NAME does not exist."
+  [[ $(container_exists) == FALSE ]] && err_exit "Container $DRAROK_CONTAINER_NAME does not exist."
+  [[ $(container_runs) == TRUE ]] && err_exit "Container $DRAROK_CONTAINER_NAME already runs."
   docker start $DRAROK_CONTAINER_NAME || err_exit "Failed starting $DRAROK_CONTAINER_NAME"
   echo "Started container $DRAROK_CONTAINER_NAME"
   exit 0
 }
 
+function restart_container() {
+  did="Started"
+  [[ $(container_exists) == FALSE ]] && err_exit "Container $DRAROK_CONTAINER_NAME does not exist."
+  if [[ $(container_runs) == TRUE ]]
+  then
+    docker stop $DRAROK_CONTAINER_NAME || err_exit "Could not stop running container $DRAROK_CONTAINER_NAME."
+    did="Restarted"
+  fi
+  docker start $DRAROK_CONTAINER_NAME || err_exit "Failed starting $DRAROK_CONTAINER_NAME"
+  echo "$did container $DRAROK_CONTAINER_NAME"
+}
 
 function cd_working_dir() {
   # If DRAROK_WORKDIR exists, go in there
@@ -131,18 +151,21 @@ function build_image() {
 }
 
 
-function deploy_new_image(parameter) {
+function deploy_new_image() {
   docker stop $DRAROK_CONTAINER_NAME && verbose "Stopped container $DRAROK_CONTAINER_NAME" || echo "Did not stop container $DRAROK_CONTAINER_NAME"
   docker container rm $DRAROK_CONTAINER_NAME && verbose "Removed container $DRAROK_CONTAINER_NAME" || echo "Did not remove container $DRAROK_CONTAINER_NAME"
-  docker run -d \
-    -e TOKEN=$DRAROK_TOKEN \
-    -e DRAROK_CRED_DIR=$DRAROK_CRED_DIR_CONTAINER
+  docker run $DETACH \
+    -e DRAROK_TOKEN=$DRAROK_TOKEN \
+    -e DRAROK_CRED_DIR=$DRAROK_CRED_DIR_CONTAINER \
     --name $DRAROK_CONTAINER_NAME \
     -v $DRAROK_CRED_DIR_HOST:$DRAROK_CRED_DIR_CONTAINER \
     $DRAROK_IMAGE_NAME:$GIT_COMMIT_SHA_SHORT || err_exit "Starting container failed."
-  echo "Started new container on image $DRAROK_CONTAINER_NAME:$GIT_COMMIT_SHA_SHORT"
+  echo "Started new container on image $DRAROK_IMAGE_NAME:$GIT_COMMIT_SHA_SHORT"
 }
 
+function die_if_command_set() {
+  [[ ! -z $COMMAND ]] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
+}
 
 # Parse arguments
 
@@ -157,54 +180,59 @@ case $i in
     # shift # past argument=value
     # ;;
     start)
-    [[ ! $COMMAND -z ]] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
-    COMMAND=START
-    shift
+      die_if_command_set
+      COMMAND=START
+      shift
     ;;
     stop)
-    [[ ! $COMMAND -z ]] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
-    COMMAND=STOP
-    shift
+      die_if_command_set
+      COMMAND=STOP
+      shift
     ;;
     restart)
-    [[ ! $COMMAND -z ]] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
-    COMMAND=RESTART
-    shift
+      die_if_command_set
+      COMMAND=RESTART
+      shift
     ;;
     build)
-    [[ ! $COMMAND -z ]] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
-    COMMAND=BUILD
-    shift
+      die_if_command_set
+      COMMAND=BUILD
+      shift
     ;;
     redeploy)
-    [[ ! $COMMAND -z ]] && err_exit 'Command given multiple times. Only use start, restart or stop once.'
-    COMMAND=REDEPLOY
-    shift
+      die_if_command_set
+      COMMAND=REDEPLOY
+      shift
     ;;
     --no-envfiles)
-    SHOULD_SOURCE_ENVFILE=FALSE
-    RECURSIVE_OPT="$RECURSIVE_OPT $i"
-    shift
+      SHOULD_SOURCE_ENVFILE=FALSE
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
     ;;
     -v|--verbose)
-    VERBOSE=TRUE
-    RECURSIVE_OPT="$RECURSIVE_OPT $i"
-    shift
+      VERBOSE=TRUE
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
     ;;
     -c=*|--cred-dir-host=*)
-    DRAROK_CRED_DIR_HOST="${i#*=}"
-    RECURSIVE_OPT="$RECURSIVE_OPT $i"
-    shift
+      DRAROK_CRED_DIR_HOST="${i#*=}"
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
     ;;
     --auto-tagging)
-    AUTO_TAGGING=TRUE
-    RECURSIVE_OPT="$RECURSIVE_OPT $i"
-    shift
+      AUTO_TAGGING=TRUE
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
     ;;
     --no-auto-tagging)
-    AUTO_TAGGING=FALSE
-    RECURSIVE_OPT="$RECURSIVE_OPT $i"
-    shift
+      AUTO_TAGGING=FALSE
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
+    ;;
+    --attach)
+      ATTACHMENT="-it"
+      RECURSIVE_OPT="$RECURSIVE_OPT $i"
+      shift
     ;;
     -h|--help)
     help="$0 [start|restart|stop|build|redeploy] <OPTIONS>
@@ -224,12 +252,14 @@ case $i in
                     host. Must be set.
 
 -v|--verbose        MIGHT LOG CREDENTIALS. CARE.
+
+--attach            Attach to container after starting.
 "
-    echo "$help"
-    exit 0
+      echo "$help"
+      exit 0
     ;;
     *)
-    err_exit "Unknown option $i"
+      err_exit "Unknown option $i"
     ;;
 esac
 done
@@ -249,8 +279,7 @@ case $COMMAND in
     start_container
   ;;
   RESTART)
-    stop_container
-    start_container
+    restart_container
   ;;
   BUILD)
     check_madatory_parameters_or_fail
@@ -258,7 +287,7 @@ case $COMMAND in
     update_repo
     build_image
   ;;
-  DEPLOY)
+  REDEPLOY)
     check_madatory_parameters_or_fail
     cd_working_dir
     update_repo
