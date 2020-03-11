@@ -9,6 +9,9 @@ pylint = "*"
 [packages]
 discord-py = {extras = ["voice"],version = "*"}
 python-dotenv = "*"
+pyotp = "*"
+qrcode = "*"
+Pillow = "*"
 
 [requires]
 python_version = "3.8"
